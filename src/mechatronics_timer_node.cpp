@@ -32,13 +32,17 @@ void callback_odom(const nav_msgs::OdometryConstPtr& msg)
   static timer_state state = timer_state::MEASURING_STARTING_POSITION;
   static double max_speed;
   static position staring_pos;
+  static position last_pos;
+  static double total_distance_traveled;
   static ros::Time start_time;
 
   // State machine
   if (state == timer_state::MEASURING_STARTING_POSITION)
   {
     max_speed = 0;
+    total_distance_traveled = 0;
     staring_pos = {msg->pose.pose.position.x, msg->pose.pose.position.y};
+    last_pos = staring_pos;
     state = timer_state::WAITING_FOR_START;
     ROS_INFO("Waiting for car to start...");
   }
@@ -61,6 +65,12 @@ void callback_odom(const nav_msgs::OdometryConstPtr& msg)
     const auto time_now = ros::Time::now();
     const auto race_duration = time_now - start_time;
 
+    // Check if goal is reached
+    const double idx = msg->pose.pose.position.x - last_pos.x;
+    const double idy = msg->pose.pose.position.y - last_pos.y;
+    last_pos = {msg->pose.pose.position.x, msg->pose.pose.position.y};
+    total_distance_traveled += std::sqrt(idx * idx + idy * idy);
+
     if (race_duration > ros::Duration(5.0))  // Do not check goal for 5s
     {
       // Update max speed
@@ -79,7 +89,9 @@ void callback_odom(const nav_msgs::OdometryConstPtr& msg)
       {
         ROS_INFO("GOAL!!!!!");
         ROS_INFO_STREAM("Time: " << race_duration.toSec()
-                                 << ", max speed = " << max_speed << " m/s");
+                                 << ", max speed = " << max_speed << " m/s"
+                                 << ", total distance = "
+                                 << total_distance_traveled << " m");
         state = timer_state::WAITING_FOR_RESTART;
 
         ROS_WARN("Restart the node to time again...");
